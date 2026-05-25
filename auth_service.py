@@ -3,7 +3,7 @@ from security import hash_text, verify_hash, create_session, verify_session, del
 
 
 def register_user(username: str, password: str, pin: str, device_id: str) -> dict:
-    # Validasi input register
+    # Validasi input register.
     if not username or not password or not pin or not device_id:
         return {
             "status": "error",
@@ -14,7 +14,7 @@ def register_user(username: str, password: str, pin: str, device_id: str) -> dic
     cursor = conn.cursor()
 
     try:
-        # Cek apakah username sudah terdaftar
+        # Cek apakah username sudah terdaftar.
         cursor.execute(
             "SELECT user_id FROM users WHERE username = ?",
             (username,)
@@ -27,11 +27,10 @@ def register_user(username: str, password: str, pin: str, device_id: str) -> dic
                 "message": "Username sudah digunakan"
             }
 
-        # Password dan PIN disimpan dalam bentuk hash
+        # PIN yang sama akan menghasilkan pin_hash/company_key yang sama.
         password_hash = hash_text(password)
         pin_hash = hash_text(pin)
 
-        # Simpan data user baru ke database
         cursor.execute(
             """
             INSERT INTO users (
@@ -70,7 +69,7 @@ def register_user(username: str, password: str, pin: str, device_id: str) -> dic
 
 
 def login_user(username: str, password: str, device_id: str) -> dict:
-    # Validasi input login
+    # Validasi input login.
     if not username or not password or not device_id:
         return {
             "status": "error",
@@ -81,10 +80,10 @@ def login_user(username: str, password: str, device_id: str) -> dict:
     cursor = conn.cursor()
 
     try:
-        # Ambil data user berdasarkan username
+        # Ambil pin_hash juga untuk company_key.
         cursor.execute(
             """
-            SELECT user_id, username, password_hash, device_id
+            SELECT user_id, username, password_hash, pin_hash, device_id
             FROM users
             WHERE username = ?
             """,
@@ -99,24 +98,23 @@ def login_user(username: str, password: str, device_id: str) -> dict:
                 "message": "Username atau password salah"
             }
 
-        # Verifikasi password dengan hash yang tersimpan
         if not verify_hash(password, user["password_hash"]):
             return {
                 "status": "error",
                 "message": "Username atau password salah"
             }
 
-        # Cek device binding
         if device_id != user["device_id"]:
             return {
                 "status": "error",
                 "message": "Perangkat tidak terdaftar"
             }
 
-        # Buat session token jika login valid
+        # company_key berasal dari PIN perusahaan yang sudah di-hash.
         session_token = create_session(
             user_id=user["user_id"],
-            username=user["username"]
+            username=user["username"],
+            company_key=user["pin_hash"]
         )
 
         return {
@@ -139,7 +137,7 @@ def login_user(username: str, password: str, device_id: str) -> dict:
 
 
 def logout_user(session_token: str) -> dict:
-    # Hapus session token saat user logout
+    # Hapus session token saat user logout.
     if not session_token:
         return {
             "status": "error",
@@ -161,5 +159,5 @@ def logout_user(session_token: str) -> dict:
 
 
 def get_user_from_session(session_token: str):
-    # Mengambil data user dari session aktif
+    # Mengambil data user dari session aktif.
     return verify_session(session_token)
