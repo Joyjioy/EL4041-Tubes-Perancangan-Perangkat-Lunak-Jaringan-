@@ -5,14 +5,14 @@ DATABASE_NAME = "cuan_tracker.db"
 
 
 def get_connection():
-    # Membuat koneksi ke database SQL.
+    # Membuat koneksi ke database SQLite.
     conn = sqlite3.connect(DATABASE_NAME)
     conn.row_factory = sqlite3.Row
     return conn
 
 
 def init_db():
-    # Membuat tabel users dan transactions jika belum ada. Buat penanganan darurat aja sih kalau buat mulai sistem di awal2.
+    # Membuat tabel users dan transactions jika belum ada.
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -30,7 +30,9 @@ def init_db():
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS transactions (
         transaction_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
+        company_key TEXT NOT NULL,
+        created_by_user_id INTEGER NOT NULL,
+        created_by_username TEXT NOT NULL,
         transaction_type TEXT NOT NULL,
         category TEXT NOT NULL,
         amount INTEGER NOT NULL,
@@ -40,7 +42,7 @@ def init_db():
         reference_number TEXT NOT NULL,
         notes TEXT,
         created_at TEXT NOT NULL,
-        FOREIGN KEY (user_id) REFERENCES users(user_id)
+        FOREIGN KEY (created_by_user_id) REFERENCES users(user_id)
     );
     """)
 
@@ -51,6 +53,3 @@ def init_db():
 def get_current_timestamp():
     # Menghasilkan timestamp dalam format string.
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
-

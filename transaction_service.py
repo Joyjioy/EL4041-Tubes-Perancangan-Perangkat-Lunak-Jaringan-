@@ -2,10 +2,7 @@ from database import get_connection, get_current_timestamp
 from auth_service import get_user_from_session
 
 
-VALID_TRANSACTION_TYPES = [
-    "Pemasukan",
-    "Pengeluaran"
-]
+VALID_TRANSACTION_TYPES = ["Pemasukan", "Pengeluaran"]
 
 VALID_INCOME_CATEGORIES = [
     "Penjualan Produk/Jasa",
@@ -40,18 +37,11 @@ VALID_DEPARTMENTS = [
     "Operations"
 ]
 
-VALID_PAYMENT_METHODS = [
-    "Cash",
-    "Transfer Bank",
-    "Kartu Perusahaan",
-    "Giro",
-    "QRIS",
-    "E-Wallet"
-]
+VALID_PAYMENT_METHODS = ["Cash", "Transfer Bank", "Kartu Perusahaan", "Giro", "QRIS", "E-Wallet"]
 
 
 def validate_transaction_data(data: dict) -> dict:
-    # Validasi field wajib
+    # Validasi field wajib.
     required_fields = [
         "transaction_type",
         "category",
@@ -64,10 +54,7 @@ def validate_transaction_data(data: dict) -> dict:
 
     for field in required_fields:
         if field not in data or data[field] in [None, ""]:
-            return {
-                "valid": False,
-                "message": f"Field {field} wajib diisi"
-            }
+            return {"valid": False, "message": f"Field {field} wajib diisi"}
 
     transaction_type = data["transaction_type"]
     category = data["category"]
@@ -77,97 +64,60 @@ def validate_transaction_data(data: dict) -> dict:
     reference_number = data["reference_number"]
     notes = data.get("notes", "")
 
-    # Validasi tipe dan kategori
     if transaction_type not in VALID_TRANSACTION_TYPES:
-        return {
-            "valid": False,
-            "message": "Tipe transaksi tidak valid"
-        }
+        return {"valid": False, "message": "Tipe transaksi tidak valid"}
 
     if transaction_type == "Pemasukan" and category not in VALID_INCOME_CATEGORIES:
-        return {
-            "valid": False,
-            "message": "Kategori pemasukan tidak valid"
-        }
+        return {"valid": False, "message": "Kategori pemasukan tidak valid"}
 
     if transaction_type == "Pengeluaran" and category not in VALID_EXPENSE_CATEGORIES:
-        return {
-            "valid": False,
-            "message": "Kategori pengeluaran tidak valid"
-        }
+        return {"valid": False, "message": "Kategori pengeluaran tidak valid"}
 
-    # Validasi departemen dan metode pembayaran
     if department not in VALID_DEPARTMENTS:
-        return {
-            "valid": False,
-            "message": "Departemen tidak valid"
-        }
+        return {"valid": False, "message": "Departemen tidak valid"}
 
     if payment_method not in VALID_PAYMENT_METHODS:
-        return {
-            "valid": False,
-            "message": "Metode pembayaran tidak valid"
-        }
+        return {"valid": False, "message": "Metode pembayaran tidak valid"}
 
-    # Validasi nominal
     try:
         amount = int(amount)
         if amount <= 0:
-            return {
-                "valid": False,
-                "message": "Nominal transaksi harus lebih dari 0"
-            }
-    except ValueError:
-        return {
-            "valid": False,
-            "message": "Nominal transaksi harus berupa angka"
-        }
+            return {"valid": False, "message": "Nominal transaksi harus lebih dari 0"}
+    except (ValueError, TypeError):
+        return {"valid": False, "message": "Nominal transaksi harus berupa angka"}
 
-    # Validasi panjang teks
     if len(reference_number) > 50:
-        return {
-            "valid": False,
-            "message": "Reference number maksimal 50 karakter"
-        }
+        return {"valid": False, "message": "Reference number maksimal 50 karakter"}
 
     if notes and len(notes) > 255:
-        return {
-            "valid": False,
-            "message": "Notes maksimal 255 karakter"
-        }
+        return {"valid": False, "message": "Notes maksimal 255 karakter"}
 
-    return {
-        "valid": True,
-        "message": "Data valid"
-    }
+    return {"valid": True, "message": "Data valid"}
 
 
 def add_transaction(session_token: str, data: dict) -> dict:
-    # Cek session user
+    # Cek session user.
     session = get_user_from_session(session_token)
 
     if not session:
-        return {
-            "status": "error",
-            "message": "Session tidak valid. Silakan login ulang."
-        }
+        return {"status": "error", "message": "Session tidak valid. Silakan login ulang."}
 
     validation = validate_transaction_data(data)
 
     if not validation["valid"]:
-        return {
-            "status": "error",
-            "message": validation["message"]
-        }
+        return {"status": "error", "message": validation["message"]}
 
     conn = get_connection()
     cursor = conn.cursor()
 
     try:
+        # Transaksi disimpan ke company_key yang sama untuk semua user dengan PIN sama.
         cursor.execute(
             """
             INSERT INTO transactions (
-                user_id,
+                company_key,
+                created_by_user_id,
+                created_by_username,
                 transaction_type,
                 category,
                 amount,
@@ -178,10 +128,12 @@ def add_transaction(session_token: str, data: dict) -> dict:
                 notes,
                 created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
+                session["company_key"],
                 session["user_id"],
+                session["username"],
                 data["transaction_type"],
                 data["category"],
                 int(data["amount"]),
@@ -199,42 +151,33 @@ def add_transaction(session_token: str, data: dict) -> dict:
         return {
             "status": "success",
             "message": "Transaksi berhasil disimpan",
-            "data": {
-                "transaction_id": cursor.lastrowid
-            }
+            "data": {"transaction_id": cursor.lastrowid}
         }
 
     except Exception as e:
-        return {
-            "status": "error",
-            "message": f"Gagal menyimpan transaksi: {str(e)}"
-        }
+        return {"status": "error", "message": f"Gagal menyimpan transaksi: {str(e)}"}
 
     finally:
         conn.close()
 
 
-def get_transactions(
-    session_token: str,
-    start_date: str = None,
-    end_date: str = None
-) -> dict:
-    # Cek session user
+def get_transactions(session_token: str, start_date: str = None, end_date: str = None) -> dict:
+    # Cek session user.
     session = get_user_from_session(session_token)
 
     if not session:
-        return {
-            "status": "error",
-            "message": "Session tidak valid. Silakan login ulang."
-        }
+        return {"status": "error", "message": "Session tidak valid. Silakan login ulang."}
 
     conn = get_connection()
     cursor = conn.cursor()
 
     try:
+        # Semua user dengan company_key sama melihat transaksi yang sama.
         query = """
             SELECT
                 transaction_id,
+                created_by_user_id,
+                created_by_username,
                 transaction_type,
                 category,
                 amount,
@@ -245,10 +188,10 @@ def get_transactions(
                 notes,
                 created_at
             FROM transactions
-            WHERE user_id = ?
+            WHERE company_key = ?
         """
 
-        params = [session["user_id"]]
+        params = [session["company_key"]]
 
         if start_date:
             query += " AND transaction_date >= ?"
@@ -266,6 +209,8 @@ def get_transactions(
         transactions = [
             {
                 "transaction_id": row["transaction_id"],
+                "created_by_user_id": row["created_by_user_id"],
+                "created_by_username": row["created_by_username"],
                 "transaction_type": row["transaction_type"],
                 "category": row["category"],
                 "amount": row["amount"],
@@ -281,46 +226,35 @@ def get_transactions(
 
         return {
             "status": "success",
-            "message": "Data transaksi berhasil diambil",
-            "data": {
-                "transactions": transactions
-            }
+            "message": "Data transaksi perusahaan berhasil diambil",
+            "data": {"transactions": transactions}
         }
 
     except Exception as e:
-        return {
-            "status": "error",
-            "message": f"Gagal mengambil transaksi: {str(e)}"
-        }
+        return {"status": "error", "message": f"Gagal mengambil transaksi: {str(e)}"}
 
     finally:
         conn.close()
 
 
-def get_summary(
-    session_token: str,
-    start_date: str = None,
-    end_date: str = None
-) -> dict:
-    # Cek session user
+def get_summary(session_token: str, start_date: str = None, end_date: str = None) -> dict:
+    # Cek session user.
     session = get_user_from_session(session_token)
 
     if not session:
-        return {
-            "status": "error",
-            "message": "Session tidak valid. Silakan login ulang."
-        }
+        return {"status": "error", "message": "Session tidak valid. Silakan login ulang."}
 
     conn = get_connection()
     cursor = conn.cursor()
 
     try:
+        # Summary dihitung untuk satu perusahaan, bukan satu user.
         base_query = """
             FROM transactions
-            WHERE user_id = ?
+            WHERE company_key = ?
         """
 
-        params = [session["user_id"]]
+        params = [session["company_key"]]
 
         if start_date:
             base_query += " AND transaction_date >= ?"
@@ -330,7 +264,6 @@ def get_summary(
             base_query += " AND transaction_date <= ?"
             params.append(end_date)
 
-        # Total pemasukan
         cursor.execute(
             """
             SELECT COALESCE(SUM(amount), 0) AS total
@@ -341,7 +274,6 @@ def get_summary(
         )
         total_income = cursor.fetchone()["total"]
 
-        # Total pengeluaran
         cursor.execute(
             """
             SELECT COALESCE(SUM(amount), 0) AS total
@@ -352,7 +284,6 @@ def get_summary(
         )
         total_expense = cursor.fetchone()["total"]
 
-        # Pemasukan per kategori
         cursor.execute(
             """
             SELECT category, COALESCE(SUM(amount), 0) AS total
@@ -362,12 +293,8 @@ def get_summary(
             """,
             params
         )
-        income_by_category = {
-            row["category"]: row["total"]
-            for row in cursor.fetchall()
-        }
+        income_by_category = {row["category"]: row["total"] for row in cursor.fetchall()}
 
-        # Pengeluaran per kategori
         cursor.execute(
             """
             SELECT category, COALESCE(SUM(amount), 0) AS total
@@ -377,28 +304,33 @@ def get_summary(
             """,
             params
         )
-        expense_by_category = {
-            row["category"]: row["total"]
-            for row in cursor.fetchall()
-        }
+        expense_by_category = {row["category"]: row["total"] for row in cursor.fetchall()}
+
+        cursor.execute(
+            """
+            SELECT created_by_username, COUNT(*) AS total_records
+            """ + base_query + """
+            GROUP BY created_by_username
+            """,
+            params
+        )
+        records_by_user = {row["created_by_username"]: row["total_records"] for row in cursor.fetchall()}
 
         return {
             "status": "success",
-            "message": "Rekap transaksi berhasil dihitung",
+            "message": "Rekap transaksi perusahaan berhasil dihitung",
             "data": {
                 "total_income": total_income,
                 "total_expense": total_expense,
                 "balance": total_income - total_expense,
                 "income_by_category": income_by_category,
-                "expense_by_category": expense_by_category
+                "expense_by_category": expense_by_category,
+                "records_by_user": records_by_user
             }
         }
 
     except Exception as e:
-        return {
-            "status": "error",
-            "message": f"Gagal menghitung summary: {str(e)}"
-        }
+        return {"status": "error", "message": f"Gagal menghitung summary: {str(e)}"}
 
     finally:
         conn.close()
