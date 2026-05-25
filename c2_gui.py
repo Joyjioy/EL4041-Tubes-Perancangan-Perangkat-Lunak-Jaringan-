@@ -185,7 +185,10 @@ window = Tk()
 window.geometry("800x450")  
 window.title("Cuan Tracker")
 
-logo = PhotoImage(file='logo_ct.png')
+logoOri = PhotoImage(file='logo_ct.png')
+logo = logoOri.subsample(8, 8) 
+
+window.iconphoto(True, logo)
 window.iconphoto(True, logo)
 window.config(background="#FFF8EF")
 
